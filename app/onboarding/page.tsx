@@ -1,4 +1,6 @@
 import { authOptions } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import { getUserOnboardingStatus } from "@/lib/onboarding-status";
 import {
   Activity,
   Ruler,
@@ -10,11 +12,51 @@ import {
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 
+async function completeOnboarding(formData: FormData) {
+  "use server";
+
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) {
+    redirect("/login");
+  }
+
+  const height = formData.get("height")?.toString();
+  const weight = formData.get("weight")?.toString();
+
+  await prisma.user.update({
+    where: { email: session.user.email },
+    data: {
+      isOnboarded: true,
+      onboardedAt: new Date(),
+      profile: {
+        upsert: {
+          create: {
+            displayName: session.user.name ?? null,
+            heightCm: height ? Number(height) : null,
+            currentWeightKg: weight ? Number(weight) : null,
+          },
+          update: {
+            heightCm: height ? Number(height) : null,
+            currentWeightKg: weight ? Number(weight) : null,
+          },
+        },
+      },
+    },
+  });
+
+  redirect("/tracker");
+}
+
 export default async function OnboardingPage() {
   const session = await getServerSession(authOptions);
 
-  if (!session) {
+  if (!session?.user?.email) {
     redirect("/login");
+  }
+
+  const isOnboarded = await getUserOnboardingStatus(session.user.email);
+  if (isOnboarded) {
+    redirect("/tracker");
   }
 
   return (
@@ -37,7 +79,7 @@ export default async function OnboardingPage() {
         </div>
 
         <div className="rounded-3xl border bg-white p-6 md:p-8 space-y-8 shadow-xl">
-          <form className="space-y-8">
+          <form className="space-y-8" action={completeOnboarding}>
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-sm font-bold">
@@ -185,7 +227,7 @@ export default async function OnboardingPage() {
             </div>
 
             <button
-              type="button"
+              type="submit"
               className="w-full h-14 rounded-xl bg-black text-white text-lg font-semibold hover:bg-black/90 active:bg-black/80 transition"
             >
               Continue
