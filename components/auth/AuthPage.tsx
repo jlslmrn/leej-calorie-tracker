@@ -19,7 +19,7 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-orange-50 via-white to-red-50 px-4">
+    <div className="min-h-[100dvh] w-full flex items-center justify-center bg-gradient-to-br from-orange-50 via-white to-red-50 px-4">
       <div className="w-full max-w-md space-y-8">
         {/* Logo + Title */}
         <div className="text-center space-y-4">
@@ -41,7 +41,7 @@ export default function AuthPage() {
 
         {/* Feature Cards */}
         <div className="space-y-3">
-          <div className="flex items-center gap-4 p-4 bg-white rounded-2xl border shadow-sm">
+          <div className="flex items-center gap-4 p-4 bg-white rounded-2xl border border-orange-100 shadow-sm">
             <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
               <Target className="w-5 h-5 text-orange-600" />
             </div>
@@ -53,7 +53,7 @@ export default function AuthPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4 p-4 bg-white rounded-2xl border shadow-sm">
+          <div className="flex items-center gap-4 p-4 bg-white rounded-2xl border border-orange-100 shadow-sm">
             <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
               <Flame className="w-5 h-5 text-orange-600" />
             </div>
@@ -65,7 +65,7 @@ export default function AuthPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4 p-4 bg-white rounded-2xl border shadow-sm">
+          <div className="flex items-center gap-4 p-4 bg-white rounded-2xl border border-orange-100 shadow-sm">
             <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
               <TrendingDown className="w-5 h-5 text-orange-600" />
             </div>
@@ -79,7 +79,7 @@ export default function AuthPage() {
         </div>
 
         {/* Login Card */}
-        <div className="bg-white rounded-3xl shadow-lg border p-8 text-center">
+        <div className="bg-white rounded-3xl shadow-lg border border-orange-100 p-8 text-center">
           <h2 className="text-xl font-semibold text-black mb-2">Get Started</h2>
           <p className="text-gray-500 text-sm mb-6">
             Sign in with Google to start tracking
@@ -111,7 +111,9 @@ export default function AuthPage() {
               />
             </svg>
 
-            <span>{isSigningIn ? "Connecting..." : "Continue with Google"}</span>
+            <span>
+              {isSigningIn ? "Connecting..." : "Continue with Google"}
+            </span>
           </button>
 
           <p className="text-xs text-gray-500 mt-6">

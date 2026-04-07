@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 
@@ -9,7 +9,13 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "Calorie Tracker",
-  description: "Track calories and progress",
+  description: "Track calories and progress"
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

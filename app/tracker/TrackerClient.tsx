@@ -1,257 +1,328 @@
 "use client";
 
-import { useEffect, useState, type KeyboardEvent } from "react";
-import { Minus, Plus, Target, Flame, TrendingDown } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Plus } from "lucide-react";
+import {
+  AddFoodSheet,
+  DayDetailsScreen,
+  ErrorState,
+  LoadingState,
+  MealsListCard,
+  MonthlyView,
+  ProgressCard,
+  StatsGrid,
+  TrackerHeader,
+  ViewToggle,
+  WeeklyView,
+} from "./_components/tracker-ui";
+import {
+  MONTH_NAMES,
+  type DayDetailData,
+  type MonthlyDayData,
+  type SummaryView,
+  type TrackerOverviewResponse,
+  type TrackerView,
+  type WeeklyDayData,
+} from "./_components/tracker-data";
 
-interface FoodEntry {
-  id: string;
-  name: string;
-  calories: number;
-  time: string;
-}
-
-interface DailyData {
-  date: string;
-  goal: number;
-  consumed: number;
-  entries: FoodEntry[];
-}
+const getTodayMonthYear = () => {
+  const now = new Date();
+  return { month: now.getUTCMonth(), year: now.getUTCFullYear() };
+};
 
 export default function TrackerClient() {
-  const [dailyGoal, setDailyGoal] = useState(2000);
-  const [consumed, setConsumed] = useState(0);
+  const { month: defaultMonth, year: defaultYear } = useMemo(getTodayMonthYear, []);
+
+  const [view, setView] = useState<TrackerView>("daily");
+  const [showAddFood, setShowAddFood] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(defaultMonth);
+  const [selectedYear, setSelectedYear] = useState(defaultYear);
+  const [selectedDayDetails, setSelectedDayDetails] = useState<DayDetailData | null>(null);
+  const [previousView, setPreviousView] = useState<SummaryView | null>(null);
+  const [overview, setOverview] = useState<TrackerOverviewResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   const [foodName, setFoodName] = useState("");
   const [calories, setCalories] = useState("");
-  const [entries, setEntries] = useState<FoodEntry[]>([]);
-  const [showGoalInput, setShowGoalInput] = useState(false);
-  const [tempGoal, setTempGoal] = useState("2000");
+  const [sheetError, setSheetError] = useState<string | null>(null);
+  const [isSubmittingEntry, setIsSubmittingEntry] = useState(false);
+  const [removingEntryId, setRemovingEntryId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const today = new Date().toISOString().split("T")[0];
-    const savedData = localStorage.getItem(`calorie-data-${today}`);
+  const loadOverview = useCallback(async (month: number, year: number) => {
+    setIsLoading(true);
+    setErrorMessage(null);
 
-    if (savedData) {
-      const data: DailyData = JSON.parse(savedData);
-      setDailyGoal(data.goal);
-      setConsumed(data.consumed);
-      setEntries(data.entries);
-      setTempGoal(String(data.goal));
+    try {
+      const response = await fetch(`/api/tracker/overview?month=${month}&year=${year}`, {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error || "Failed to load tracker data");
+      }
+
+      const payload = (await response.json()) as TrackerOverviewResponse;
+      setOverview(payload);
+      setSelectedMonth(payload.monthly.month);
+      setSelectedYear(payload.monthly.year);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    const today = new Date().toISOString().split("T")[0];
-    const data: DailyData = {
-      date: today,
-      goal: dailyGoal,
-      consumed,
-      entries,
-    };
-    localStorage.setItem(`calorie-data-${today}`, JSON.stringify(data));
-  }, [dailyGoal, consumed, entries]);
+    void loadOverview(selectedMonth, selectedYear);
+  }, [loadOverview, selectedMonth, selectedYear]);
 
-  const remaining = dailyGoal - consumed;
-  const progressPercentage = dailyGoal > 0 ? (consumed / dailyGoal) * 100 : 0;
-
-  const addFood = () => {
-    if (!foodName.trim() || !calories || Number(calories) <= 0) return;
-
-    const newEntry: FoodEntry = {
-      id: Date.now().toString(),
-      name: foodName.trim(),
-      calories: Number(calories),
-      time: new Date().toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    };
-
-    setEntries((prev) => [...prev, newEntry]);
-    setConsumed((prev) => prev + Number(calories));
-    setFoodName("");
-    setCalories("");
-  };
-
-  const removeEntry = (id: string) => {
-    setEntries((prev) => {
-      const entry = prev.find((item) => item.id === id);
-      if (entry) {
-        setConsumed((current) => current - entry.calories);
+  const openDayDetails = useCallback(
+    async (date: string, source: SummaryView) => {
+      setPreviousView(source);
+      const response = await fetch(`/api/tracker/day?date=${date}`, { cache: "no-store" });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        setErrorMessage(body?.error || "Failed to load selected day");
+        return;
       }
-      return prev.filter((item) => item.id !== id);
-    });
+      const payload = (await response.json()) as { day: DayDetailData };
+      setSelectedDayDetails(payload.day);
+    },
+    [],
+  );
+
+  const refreshDayDetails = useCallback(async (date: string) => {
+    const response = await fetch(`/api/tracker/day?date=${date}`, { cache: "no-store" });
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(body?.error || "Failed to refresh selected day");
+    }
+    const payload = (await response.json()) as { day: DayDetailData };
+    setSelectedDayDetails(payload.day);
+  }, []);
+
+  const onSelectDay = (day: WeeklyDayData | MonthlyDayData, source: SummaryView) => {
+    void openDayDetails(day.date, source);
   };
 
-  const updateGoal = () => {
-    if (!tempGoal || Number(tempGoal) <= 0) return;
-    setDailyGoal(Number(tempGoal));
-    setShowGoalInput(false);
+  const onBackFromDayDetails = () => {
+    setSelectedDayDetails(null);
+    if (previousView) {
+      setView(previousView);
+      setPreviousView(null);
+    }
   };
 
-  const handleKeyPress = (
-    e: KeyboardEvent<HTMLInputElement>,
-    action: () => void,
-  ) => {
-    if (e.key === "Enter") action();
+  const onPreviousMonth = () => {
+    if (!overview?.monthly.canGoPrevMonth) return;
+    if (selectedMonth === 0) {
+      setSelectedMonth(11);
+      setSelectedYear((current) => current - 1);
+      return;
+    }
+    setSelectedMonth((current) => current - 1);
   };
+
+  const onNextMonth = () => {
+    if (selectedMonth === 11) {
+      setSelectedMonth(0);
+      setSelectedYear((current) => current + 1);
+      return;
+    }
+    setSelectedMonth((current) => current + 1);
+  };
+
+  const submitEntry = async () => {
+    setSheetError(null);
+    const trimmedName = foodName.trim();
+    const parsedCalories = Number(calories);
+
+    if (!trimmedName) {
+      setSheetError("Food name is required.");
+      return;
+    }
+    if (!Number.isFinite(parsedCalories) || parsedCalories <= 1) {
+      setSheetError("Calories must be greater than 1.");
+      return;
+    }
+
+    setIsSubmittingEntry(true);
+    try {
+      const response = await fetch("/api/tracker/entries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: trimmedName,
+          calories: Math.round(parsedCalories),
+          date: overview?.daily.date,
+        }),
+      });
+
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error || "Failed to add entry");
+      }
+
+      setShowAddFood(false);
+      setFoodName("");
+      setCalories("");
+      await loadOverview(selectedMonth, selectedYear);
+    } catch (error) {
+      setSheetError(error instanceof Error ? error.message : "Failed to add entry");
+    } finally {
+      setIsSubmittingEntry(false);
+    }
+  };
+
+  const removeEntry = async (entryId: string) => {
+    if (!entryId || removingEntryId) return;
+    setErrorMessage(null);
+    setRemovingEntryId(entryId);
+
+    try {
+      const response = await fetch(`/api/tracker/entries/${encodeURIComponent(entryId)}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error || "Failed to remove entry");
+      }
+
+      if (selectedDayDetails) {
+        await refreshDayDetails(selectedDayDetails.date);
+      }
+      await loadOverview(selectedMonth, selectedYear);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to remove entry");
+    } finally {
+      setRemovingEntryId(null);
+    }
+  };
+
+  if (selectedDayDetails) {
+    return (
+      <DayDetailsScreen
+        details={selectedDayDetails}
+        onBack={onBackFromDayDetails}
+        onRemoveEntry={(entryId) => void removeEntry(entryId)}
+        removingEntryId={removingEntryId}
+      />
+    );
+  }
+
+  if (isLoading && !overview) {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-b from-orange-50/50 via-white to-white px-4 py-6">
+        <LoadingState />
+      </div>
+    );
+  }
+
+  if (!overview) {
+    return (
+      <div className="mx-auto mt-10 w-full max-w-2xl px-4">
+        <ErrorState
+          message={errorMessage ?? "Failed to initialize tracker."}
+          onRetry={() => void loadOverview(selectedMonth, selectedYear)}
+        />
+      </div>
+    );
+  }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-red-50 px-4 py-8">
-      <div className="mx-auto w-full max-w-2xl space-y-4">
-        <div className="space-y-2 py-2 text-center">
-          <h1 className="text-3xl font-bold text-black">Calorie Tracker</h1>
-          <p className="text-gray-500">Track your daily calorie deficit</p>
-        </div>
+    <div className="min-h-screen w-full bg-gradient-to-b from-orange-50/50 via-white to-white">
+      <TrackerHeader profile={overview.profile} />
 
-        <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <article className="space-y-2 rounded-2xl border bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-2 text-gray-500">
-              <Target className="h-4 w-4" />
-              <span className="text-sm">Daily Goal</span>
-            </div>
+      <main className="mx-auto w-full max-w-2xl space-y-6 px-4 py-6 pb-24">
+        {errorMessage ? (
+          <ErrorState
+            message={errorMessage}
+            onRetry={() => void loadOverview(selectedMonth, selectedYear)}
+          />
+        ) : null}
 
-            {showGoalInput ? (
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={tempGoal}
-                  onChange={(e) => setTempGoal(e.target.value)}
-                  onKeyDown={(e) => handleKeyPress(e, updateGoal)}
-                  className="h-9 w-full rounded-lg border px-3 text-black outline-none focus:ring-2 focus:ring-orange-200"
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  onClick={updateGoal}
-                  className="h-9 rounded-lg bg-black px-3 text-sm font-medium text-white hover:bg-black/90"
-                >
-                  Set
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowGoalInput(true)}
-                className="text-2xl font-bold text-black transition-colors hover:text-orange-600"
-              >
-                {dailyGoal} cal
-              </button>
-            )}
-          </article>
+        <ViewToggle value={view} onChange={setView} />
 
-          <article className="space-y-2 rounded-2xl border bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-2 text-gray-500">
-              <Flame className="h-4 w-4" />
-              <span className="text-sm">Consumed</span>
-            </div>
-            <div className="text-2xl font-bold text-black">{consumed} cal</div>
-          </article>
-
-          <article className="space-y-2 rounded-2xl border bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-2 text-gray-500">
-              <TrendingDown className="h-4 w-4" />
-              <span className="text-sm">Remaining</span>
-            </div>
-            <div
-              className={`text-2xl font-bold ${
-                remaining < 0 ? "text-red-600" : "text-black"
-              }`}
-            >
-              {remaining} cal
-            </div>
-          </article>
-        </section>
-
-        <section className="space-y-2 rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-black">Daily Progress</span>
-            <span className="font-medium text-black">
-              {Math.round(progressPercentage)}%
-            </span>
-          </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
-            <div
-              className="h-full bg-orange-500 transition-all"
-              style={{ width: `${Math.min(progressPercentage, 100)}%` }}
+        {view === "daily" && (
+          <>
+            <StatsGrid
+              goal={overview.daily.goal}
+              consumed={overview.daily.consumed}
+              remaining={overview.daily.remaining}
             />
-          </div>
-        </section>
-
-        <section className="space-y-4 rounded-2xl border bg-white p-4 shadow-sm">
-          <h2 className="font-semibold text-black">Add Food</h2>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label htmlFor="food-name" className="text-sm text-black">
-                Food Name
-              </label>
-              <input
-                id="food-name"
-                placeholder="e.g., Chicken Salad"
-                value={foodName}
-                onChange={(e) => setFoodName(e.target.value)}
-                onKeyDown={(e) => handleKeyPress(e, addFood)}
-                className="h-11 w-full rounded-xl border px-4 text-black outline-none focus:ring-2 focus:ring-orange-200"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="calories" className="text-sm text-black">
-                Calories
-              </label>
-              <input
-                id="calories"
-                type="number"
-                placeholder="e.g., 350"
-                value={calories}
-                onChange={(e) => setCalories(e.target.value)}
-                onKeyDown={(e) => handleKeyPress(e, addFood)}
-                className="h-11 w-full rounded-xl border px-4 text-black outline-none focus:ring-2 focus:ring-orange-200"
-              />
-            </div>
-
-            <button
-              type="button"
-              onClick={addFood}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-black font-semibold text-white hover:bg-black/90"
-            >
-              <Plus className="h-4 w-4" />
-              Add Food
-            </button>
-          </div>
-        </section>
-
-        {entries.length > 0 && (
-          <section className="space-y-4 rounded-2xl border bg-white p-4 shadow-sm">
-            <h2 className="font-semibold text-black">Today&apos;s Meals</h2>
-            <div className="space-y-2">
-              {entries.map((entry) => (
-                <div
-                  key={entry.id}
-                  className="flex items-center justify-between rounded-xl border bg-white p-3"
-                >
-                  <div className="flex-1">
-                    <div className="font-medium text-black">{entry.name}</div>
-                    <div className="text-sm text-gray-500">{entry.time}</div>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <span className="font-semibold text-black">
-                      {entry.calories} cal
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => removeEntry(entry.id)}
-                      className="flex h-8 w-8 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100"
-                    >
-                      <Minus className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
+            <ProgressCard
+              title="Today's Progress"
+              subtitle={
+                overview.daily.goal <= 0
+                  ? "Set your calorie goal to start tracking."
+                  : overview.daily.remaining > 0
+                  ? `${overview.daily.remaining} calories left for today`
+                  : "Goal exceeded for today"
+              }
+              goal={overview.daily.goal}
+              consumed={overview.daily.consumed}
+              remaining={overview.daily.remaining}
+              progressPercentage={overview.daily.progressPercentage}
+            />
+            <MealsListCard
+              title="Today's Meals"
+              entries={overview.daily.entries}
+              onRemoveEntry={(entryId) => void removeEntry(entryId)}
+              removingEntryId={removingEntryId}
+            />
+          </>
         )}
-      </div>
-    </main>
+
+        {view === "weekly" && (
+          <WeeklyView
+            daysHit={overview.weekly.daysHit}
+            weeklyData={overview.weekly.data}
+            onDayClick={onSelectDay}
+          />
+        )}
+
+        {view === "monthly" && (
+          <MonthlyView
+            selectedMonth={overview.monthly.month}
+            selectedYear={overview.monthly.year}
+            monthNames={MONTH_NAMES}
+            monthlyData={overview.monthly.data}
+            daysHit={overview.monthly.daysHit}
+            canGoPrevMonth={overview.monthly.canGoPrevMonth}
+            onPreviousMonth={onPreviousMonth}
+            onNextMonth={onNextMonth}
+            onDayClick={onSelectDay}
+          />
+        )}
+      </main>
+
+      {view === "daily" && (
+        <>
+          <button
+            type="button"
+            onClick={() => setShowAddFood(true)}
+            className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-red-500 text-white shadow-lg transition-all hover:shadow-xl active:scale-95"
+            aria-label="Open add food sheet"
+          >
+            <Plus className="h-6 w-6" />
+          </button>
+          <AddFoodSheet
+            open={showAddFood}
+            foodName={foodName}
+            calories={calories}
+            isSubmitting={isSubmittingEntry}
+            errorMessage={sheetError}
+            onClose={() => {
+              setShowAddFood(false);
+              setSheetError(null);
+            }}
+            onFoodNameChange={setFoodName}
+            onCaloriesChange={setCalories}
+            onSubmit={() => void submitEntry()}
+          />
+        </>
+      )}
+    </div>
   );
 }
