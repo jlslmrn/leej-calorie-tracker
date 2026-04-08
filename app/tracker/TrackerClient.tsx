@@ -6,6 +6,7 @@ import {
   AddFoodSheet,
   DayDetailsScreen,
   ErrorState,
+  LoadingOverlay,
   LoadingState,
   MealsListCard,
   MonthlyView,
@@ -48,6 +49,7 @@ export default function TrackerClient() {
   const [sheetError, setSheetError] = useState<string | null>(null);
   const [isSubmittingEntry, setIsSubmittingEntry] = useState(false);
   const [removingEntryId, setRemovingEntryId] = useState<string | null>(null);
+  const [isActionLoading, setIsActionLoading] = useState(false);
 
   const loadOverview = useCallback(async (month: number, year: number) => {
     setIsLoading(true);
@@ -80,14 +82,21 @@ export default function TrackerClient() {
   const openDayDetails = useCallback(
     async (date: string, source: SummaryView) => {
       setPreviousView(source);
-      const response = await fetch(`/api/tracker/day?date=${date}`, { cache: "no-store" });
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as { error?: string } | null;
-        setErrorMessage(body?.error || "Failed to load selected day");
-        return;
+      setIsActionLoading(true);
+      try {
+        const response = await fetch(`/api/tracker/day?date=${date}`, { cache: "no-store" });
+        if (!response.ok) {
+          const body = (await response.json().catch(() => null)) as { error?: string } | null;
+          setErrorMessage(body?.error || "Failed to load selected day");
+          return;
+        }
+        const payload = (await response.json()) as { day: DayDetailData };
+        setSelectedDayDetails(payload.day);
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : "Failed to load selected day");
+      } finally {
+        setIsActionLoading(false);
       }
-      const payload = (await response.json()) as { day: DayDetailData };
-      setSelectedDayDetails(payload.day);
     },
     [],
   );
@@ -179,6 +188,7 @@ export default function TrackerClient() {
     if (!entryId || removingEntryId) return;
     setErrorMessage(null);
     setRemovingEntryId(entryId);
+    setIsActionLoading(true);
 
     try {
       const response = await fetch(`/api/tracker/entries/${encodeURIComponent(entryId)}`, {
@@ -197,17 +207,21 @@ export default function TrackerClient() {
       setErrorMessage(error instanceof Error ? error.message : "Failed to remove entry");
     } finally {
       setRemovingEntryId(null);
+      setIsActionLoading(false);
     }
   };
 
   if (selectedDayDetails) {
     return (
-      <DayDetailsScreen
-        details={selectedDayDetails}
-        onBack={onBackFromDayDetails}
-        onRemoveEntry={(entryId) => void removeEntry(entryId)}
-        removingEntryId={removingEntryId}
-      />
+      <>
+        <DayDetailsScreen
+          details={selectedDayDetails}
+          onBack={onBackFromDayDetails}
+          onRemoveEntry={(entryId) => void removeEntry(entryId)}
+          removingEntryId={removingEntryId}
+        />
+        {isActionLoading ? <LoadingOverlay message="Updating tracker..." /> : null}
+      </>
     );
   }
 
@@ -249,7 +263,8 @@ export default function TrackerClient() {
             <StatsGrid
               goal={overview.daily.goal}
               consumed={overview.daily.consumed}
-              remaining={overview.daily.remaining}
+              totalDeficit={overview.daily.totalDeficit}
+              isDeficitPositive={overview.daily.isDeficitPositive}
             />
             <ProgressCard
               title="Today's Progress"
@@ -323,6 +338,8 @@ export default function TrackerClient() {
           />
         </>
       )}
+
+      {isActionLoading ? <LoadingOverlay message="Updating tracker..." /> : null}
     </div>
   );
 }

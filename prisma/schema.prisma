@@ -134,6 +134,7 @@ model DailyLog {
   date   DateTime @db.Date
 
   calorieGoal       Int
+  maintenanceCalories Int?
   caloriesConsumed  Int     @default(0)
   remainingCalories Int
   progressPercent   Decimal @default(0) @db.Decimal(5, 2)

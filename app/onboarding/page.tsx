@@ -218,6 +218,7 @@ async function completeOnboarding(formData: FormData) {
         userId: user.id,
         date: today,
         calorieGoal: dailyGoal,
+        maintenanceCalories: Math.round(tdee),
         caloriesConsumed: 0,
         remainingCalories: dailyGoal,
         progressPercent: 0,
@@ -225,6 +226,7 @@ async function completeOnboarding(formData: FormData) {
       },
       update: {
         calorieGoal: dailyGoal,
+        maintenanceCalories: Math.round(tdee),
         remainingCalories: dailyGoal,
         progressPercent: 0,
       },

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import {
   getCurrentUserForTracker,
   getGoalFromProfile,
+  getMaintenanceFromProfile,
   mapDay,
   parseDateKey,
 } from "@/lib/tracker";
@@ -30,10 +31,12 @@ export async function GET(request: Request) {
   });
 
   const goal = dailyLog?.calorieGoal ?? getGoalFromProfile(user);
+  const maintenanceCalories =
+    dailyLog?.maintenanceCalories ?? getMaintenanceFromProfile(user);
   const consumed = dailyLog?.caloriesConsumed ?? 0;
   const entries = dailyLog?.entries ?? [];
 
   return NextResponse.json({
-    day: mapDay(parsed, goal, consumed, entries),
+    day: mapDay(parsed, goal, maintenanceCalories, consumed, entries),
   });
 }

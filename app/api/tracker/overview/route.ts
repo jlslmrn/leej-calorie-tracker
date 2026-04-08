@@ -6,6 +6,7 @@ import {
   getBmiLabel,
   getCurrentUserForTracker,
   getGoalFromProfile,
+  getMaintenanceFromProfile,
   getWeekStartMonday,
   getWeekdayShort,
   mapDay,
@@ -54,6 +55,7 @@ export async function GET(request: Request) {
   weekEnd.setDate(weekEnd.getDate() + 6);
 
   const goal = getGoalFromProfile(user);
+  const maintenanceCalories = getMaintenanceFromProfile(user);
 
   const [todayLog, weeklyLogs, monthlyLogs] = await Promise.all([
     prisma.dailyLog.findUnique({
@@ -69,6 +71,7 @@ export async function GET(request: Request) {
         date: true,
         caloriesConsumed: true,
         calorieGoal: true,
+        maintenanceCalories: true,
       },
     }),
     prisma.dailyLog.findMany({
@@ -80,6 +83,7 @@ export async function GET(request: Request) {
         date: true,
         caloriesConsumed: true,
         calorieGoal: true,
+        maintenanceCalories: true,
       },
     }),
   ]);
@@ -87,6 +91,7 @@ export async function GET(request: Request) {
   const daily = mapDay(
     todayDate,
     todayLog?.calorieGoal ?? goal,
+    todayLog?.maintenanceCalories ?? maintenanceCalories,
     todayLog?.caloriesConsumed ?? 0,
     todayLog?.entries ?? [],
   );

@@ -9,6 +9,7 @@ type UserWithProfile = User & {
     heightCm: unknown | null;
     currentWeightKg: unknown | null;
     dailyCalorieGoal: number | null;
+    estimatedTdee: unknown | null;
     bmi: unknown | null;
   } | null;
 };
@@ -65,16 +66,21 @@ export const mapEntries = (entries: PrismaFoodEntry[]) =>
 export const getGoalFromProfile = (user: UserWithProfile) =>
   user.profile?.dailyCalorieGoal ?? 0;
 
+export const getMaintenanceFromProfile = (user: UserWithProfile) =>
+  Math.round(toNumber(user.profile?.estimatedTdee));
+
 export const calculateProgress = (goal: number, consumed: number) =>
   goal > 0 ? (consumed / goal) * 100 : 0;
 
 export const mapDay = (
   date: Date,
   goal: number,
+  maintenanceCalories: number,
   consumed: number,
   entries: PrismaFoodEntry[],
 ) => {
   const progressPercentage = calculateProgress(goal, consumed);
+  const totalDeficit = maintenanceCalories - consumed;
   return {
     date: formatDateKey(date),
     dateLabel: date.toLocaleDateString("en-US", {
@@ -84,8 +90,11 @@ export const mapDay = (
       day: "numeric",
     }),
     goal,
+    maintenanceCalories,
     consumed,
     remaining: goal - consumed,
+    totalDeficit,
+    isDeficitPositive: consumed <= maintenanceCalories,
     progressPercentage,
     entries: mapEntries(entries),
   };
@@ -104,6 +113,7 @@ export const getCurrentUserForTracker = async () => {
           heightCm: true,
           currentWeightKg: true,
           dailyCalorieGoal: true,
+          estimatedTdee: true,
           bmi: true,
         },
       },
@@ -115,6 +125,7 @@ export const getOrCreateDailyLog = async (
   userId: string,
   date: Date,
   goal: number,
+  maintenanceCalories: number,
 ) => {
   const existing = await prisma.dailyLog.findUnique({
     where: { userId_date: { userId, date } },
@@ -126,6 +137,7 @@ export const getOrCreateDailyLog = async (
       userId,
       date,
       calorieGoal: goal,
+      maintenanceCalories,
       caloriesConsumed: 0,
       remainingCalories: goal,
       progressPercent: 0,

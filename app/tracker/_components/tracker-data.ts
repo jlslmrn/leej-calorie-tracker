@@ -12,8 +12,11 @@ export interface DayDetailData {
   date: string;
   dateLabel: string;
   goal: number;
+  maintenanceCalories: number;
   consumed: number;
   remaining: number;
+  totalDeficit: number;
+  isDeficitPositive: boolean;
   progressPercentage: number;
   entries: FoodEntry[];
 }

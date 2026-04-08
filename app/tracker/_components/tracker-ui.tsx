@@ -40,7 +40,8 @@ interface TrackerHeaderProps {
 interface StatsGridProps {
   goal: number;
   consumed: number;
-  remaining: number;
+  totalDeficit: number;
+  isDeficitPositive: boolean;
 }
 
 interface ProgressCardProps {
@@ -50,6 +51,9 @@ interface ProgressCardProps {
   consumed: number;
   remaining: number;
   progressPercentage: number;
+  maintenanceCalories?: number;
+  totalDeficit?: number;
+  isDeficitPositive?: boolean;
 }
 
 interface MealsListCardProps {
@@ -249,7 +253,13 @@ function StatCard({
   );
 }
 
-export function StatsGrid({ goal, consumed, remaining }: StatsGridProps) {
+export function StatsGrid({ goal, consumed, totalDeficit, isDeficitPositive }: StatsGridProps) {
+  const deficitClassName = isDeficitPositive ? "text-green-600" : "text-orange-500";
+  const deficitCardClassName =
+    isDeficitPositive
+      ? "bg-gradient-to-br from-green-50 to-emerald-50 border-green-200"
+      : "bg-gradient-to-br from-orange-50 to-red-50 border-orange-200";
+
   return (
     <section className="grid grid-cols-3 gap-3">
       <StatCard icon={<Target className="h-3.5 w-3.5" />} label="Goal" value={goal} />
@@ -258,12 +268,14 @@ export function StatsGrid({ goal, consumed, remaining }: StatsGridProps) {
         label="Eaten"
         value={consumed}
       />
-      <StatCard
-        icon={<TrendingDown className="h-3.5 w-3.5" />}
-        label="Left"
-        value={remaining}
-        valueClassName={remaining < 0 ? "text-orange-500" : "text-green-600"}
-      />
+      <article className={`${cardBase} space-y-1 ${deficitCardClassName}`}>
+        <div className="flex items-center gap-1.5 text-gray-500">
+          <TrendingDown className="h-3.5 w-3.5" />
+          <span className="text-xs">Deficit</span>
+        </div>
+        <div className={`text-xl font-bold ${deficitClassName}`}>{totalDeficit}</div>
+        <div className="text-xs text-gray-500">cal</div>
+      </article>
     </section>
   );
 }
@@ -275,7 +287,20 @@ export function ProgressCard({
   consumed,
   remaining,
   progressPercentage,
+  maintenanceCalories,
+  totalDeficit,
+  isDeficitPositive,
 }: ProgressCardProps) {
+  const showDeficitBreakdown =
+    typeof maintenanceCalories === "number" &&
+    typeof totalDeficit === "number" &&
+    typeof isDeficitPositive === "boolean";
+  const deficitContainerClass = isDeficitPositive
+    ? "bg-green-50 border-green-200"
+    : "bg-orange-50 border-orange-200";
+  const deficitLabelClass = isDeficitPositive ? "text-green-700" : "text-orange-700";
+  const deficitValueClass = isDeficitPositive ? "text-green-700" : "text-orange-700";
+
   return (
     <section className="rounded-2xl border-2 border-orange-100 bg-gradient-to-br from-orange-50 to-red-50 p-6 shadow-sm">
       <div className="flex items-start justify-between">
@@ -312,6 +337,25 @@ export function ProgressCard({
           <p className="text-xs text-gray-500">Remaining</p>
         </div>
       </div>
+
+      {showDeficitBreakdown ? (
+        <div className={`mt-4 rounded-lg border p-3 ${deficitContainerClass}`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className={`mb-1 text-xs font-medium ${deficitLabelClass}`}>
+                Total Deficit Achieved
+              </div>
+              <div className="text-sm text-gray-500">
+                TDEE ({maintenanceCalories}) - Eaten ({consumed})
+              </div>
+            </div>
+            <div className="text-right">
+              <div className={`text-2xl font-bold ${deficitValueClass}`}>{totalDeficit}</div>
+              <div className="text-xs text-gray-500">calories</div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -576,7 +620,8 @@ export function DayDetailsScreen({
         <StatsGrid
           goal={details.goal}
           consumed={details.consumed}
-          remaining={details.remaining}
+          totalDeficit={details.totalDeficit}
+          isDeficitPositive={details.isDeficitPositive}
         />
         <ProgressCard
           title="Daily Progress"
@@ -589,6 +634,9 @@ export function DayDetailsScreen({
           consumed={details.consumed}
           remaining={details.remaining}
           progressPercentage={details.progressPercentage}
+          maintenanceCalories={details.maintenanceCalories}
+          totalDeficit={details.totalDeficit}
+          isDeficitPositive={details.isDeficitPositive}
         />
         <MealsListCard
           title="Meals"
@@ -606,6 +654,17 @@ export function LoadingState() {
     <div className="flex min-h-[60vh] items-center justify-center text-gray-500">
       <Loader2 className="mr-2 h-5 w-5 animate-spin" />
       Loading tracker...
+    </div>
+  );
+}
+
+export function LoadingOverlay({ message }: { message?: string }) {
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/25 backdrop-blur-sm">
+      <div className="flex items-center gap-3 rounded-xl bg-white px-4 py-3 shadow-xl">
+        <Loader2 className="h-5 w-5 animate-spin text-orange-500" />
+        <span className="text-sm font-medium text-gray-700">{message ?? "Loading..."}</span>
+      </div>
     </div>
   );
 }

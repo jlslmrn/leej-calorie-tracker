@@ -4,6 +4,7 @@ import {
   formatDateKey,
   getCurrentUserForTracker,
   getGoalFromProfile,
+  getMaintenanceFromProfile,
   mapDay,
   parseDateKey,
 } from "@/lib/tracker";
@@ -51,6 +52,7 @@ export async function POST(request: Request) {
   }
 
   const goal = getGoalFromProfile(user);
+  const maintenanceCalories = getMaintenanceFromProfile(user);
 
   const { updatedDailyLog } = await prisma.$transaction(async (tx) => {
     const existingLog = await tx.dailyLog.findUnique({
@@ -64,6 +66,7 @@ export async function POST(request: Request) {
           userId: user.id,
           date,
           calorieGoal: goal,
+          maintenanceCalories,
           caloriesConsumed: 0,
           remainingCalories: goal,
           progressPercent: 0,
@@ -115,6 +118,7 @@ export async function POST(request: Request) {
     day: mapDay(
       date,
       dailyLogWithEntries.calorieGoal,
+      dailyLogWithEntries.maintenanceCalories ?? maintenanceCalories,
       dailyLogWithEntries.caloriesConsumed,
       dailyLogWithEntries.entries,
     ),
