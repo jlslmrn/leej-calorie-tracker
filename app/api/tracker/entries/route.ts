@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
   formatDateKey,
+  getDateKeyInTimeZone,
   getCurrentUserForTracker,
   getGoalFromProfile,
   getMaintenanceFromProfile,
@@ -13,6 +14,7 @@ interface CreateEntryBody {
   name?: unknown;
   calories?: unknown;
   date?: unknown;
+  tz?: unknown;
 }
 
 export async function POST(request: Request) {
@@ -24,6 +26,8 @@ export async function POST(request: Request) {
   const body = (await request.json()) as CreateEntryBody;
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const calories = Number(body.calories);
+  const timeZone =
+    typeof body.tz === "string" && body.tz ? body.tz : "UTC";
 
   if (!name) {
     return NextResponse.json({ error: "Food name is required" }, { status: 400 });
@@ -36,14 +40,25 @@ export async function POST(request: Request) {
     );
   }
 
+  let fallbackDateKey = formatDateKey(new Date());
+  try {
+    fallbackDateKey = getDateKeyInTimeZone(new Date(), timeZone);
+  } catch {
+    fallbackDateKey = formatDateKey(new Date());
+  }
   const dateKey =
-    typeof body.date === "string" && body.date ? body.date : formatDateKey(new Date());
+    typeof body.date === "string" && body.date ? body.date : fallbackDateKey;
   const date = parseDateKey(dateKey);
   if (Number.isNaN(date.getTime())) {
     return NextResponse.json({ error: "Invalid date format" }, { status: 400 });
   }
 
-  const userJoinDate = parseDateKey(formatDateKey(user.createdAt));
+  let userJoinDate = parseDateKey(formatDateKey(user.createdAt));
+  try {
+    userJoinDate = parseDateKey(getDateKeyInTimeZone(user.createdAt, timeZone));
+  } catch {
+    userJoinDate = parseDateKey(formatDateKey(user.createdAt));
+  }
   if (date < userJoinDate) {
     return NextResponse.json(
       { error: "Cannot add entries before account creation date" },

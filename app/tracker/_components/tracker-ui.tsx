@@ -33,6 +33,15 @@ import { getRingColorClass } from "./tracker-data";
 
 const cardBase = "rounded-2xl border border-gray-200 bg-white p-4 shadow-sm";
 
+const formatMealTime = (loggedAt: string) => {
+  const parsed = new Date(loggedAt);
+  if (Number.isNaN(parsed.getTime())) return "--:--";
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(parsed);
+};
+
 interface TrackerHeaderProps {
   profile: TrackerProfile;
 }
@@ -386,7 +395,7 @@ export function MealsListCard({
             >
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium text-black">{entry.name}</div>
-                <div className="text-xs text-gray-500">{entry.time}</div>
+                <div className="text-xs text-gray-500">{formatMealTime(entry.loggedAt)}</div>
               </div>
               <div className="ml-3 flex items-center gap-3">
                 <div className="text-right">

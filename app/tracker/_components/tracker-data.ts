@@ -5,7 +5,7 @@ export interface FoodEntry {
   id: string;
   name: string;
   calories: number;
-  time: string;
+  loggedAt: string;
 }
 
 export interface DayDetailData {

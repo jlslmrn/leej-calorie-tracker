@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import {
   calculateProgress,
   formatDateKey,
+  getDateKeyInTimeZone,
   getBmiLabel,
   getCurrentUserForTracker,
   getGoalFromProfile,
@@ -20,6 +21,15 @@ const getMonthRange = (year: number, month: number) => {
   return { start, end };
 };
 
+const isValidTimeZone = (timeZone: string) => {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export async function GET(request: Request) {
   const user = await getCurrentUserForTracker();
   if (!user) {
@@ -28,16 +38,35 @@ export async function GET(request: Request) {
 
   const now = new Date();
   const url = new URL(request.url);
+  const timeZoneParam = url.searchParams.get("tz");
+  const timeZone =
+    timeZoneParam && isValidTimeZone(timeZoneParam) ? timeZoneParam : "UTC";
+  const anchorDateParam = url.searchParams.get("anchorDate");
+  const fallbackAnchorDate = getDateKeyInTimeZone(now, timeZone);
+  const requestedAnchorDateKey =
+    anchorDateParam && /^\d{4}-\d{2}-\d{2}$/.test(anchorDateParam)
+      ? anchorDateParam
+      : fallbackAnchorDate;
+  const parsedAnchorDate = parseDateKey(requestedAnchorDateKey);
+  const anchorDateKey = Number.isNaN(parsedAnchorDate.getTime())
+    ? fallbackAnchorDate
+    : requestedAnchorDateKey;
+
   const monthParam = Number(url.searchParams.get("month"));
   const yearParam = Number(url.searchParams.get("year"));
+  const anchorDate = parseDateKey(anchorDateKey);
+  const anchorMonth = anchorDate.getUTCMonth();
+  const anchorYear = anchorDate.getUTCFullYear();
 
-  const minMonth = user.createdAt.getUTCMonth();
-  const minYear = user.createdAt.getUTCFullYear();
+  const joinedDateKey = getDateKeyInTimeZone(user.createdAt, timeZone);
+  const joinedDate = parseDateKey(joinedDateKey);
+  const minMonth = joinedDate.getUTCMonth();
+  const minYear = joinedDate.getUTCFullYear();
 
-  let selectedMonth = Number.isInteger(monthParam) ? monthParam : now.getUTCMonth();
-  let selectedYear = Number.isInteger(yearParam) ? yearParam : now.getUTCFullYear();
+  let selectedMonth = Number.isInteger(monthParam) ? monthParam : anchorMonth;
+  let selectedYear = Number.isInteger(yearParam) ? yearParam : anchorYear;
 
-  if (selectedMonth < 0 || selectedMonth > 11) selectedMonth = now.getUTCMonth();
+  if (selectedMonth < 0 || selectedMonth > 11) selectedMonth = anchorMonth;
 
   if (
     selectedYear < minYear ||
@@ -47,12 +76,11 @@ export async function GET(request: Request) {
     selectedYear = minYear;
   }
 
-  const todayKey = formatDateKey(now);
-  const todayDate = parseDateKey(todayKey);
+  const todayDate = anchorDate;
   const { start: monthStart, end: monthEnd } = getMonthRange(selectedYear, selectedMonth);
-  const weekStart = getWeekStartMonday(now);
+  const weekStart = getWeekStartMonday(todayDate);
   const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekEnd.getDate() + 6);
+  weekEnd.setUTCDate(weekEnd.getUTCDate() + 6);
 
   const goal = getGoalFromProfile(user);
   const maintenanceCalories = getMaintenanceFromProfile(user);
@@ -101,7 +129,7 @@ export async function GET(request: Request) {
   );
   const weeklyData = Array.from({ length: 7 }, (_, index) => {
     const date = new Date(weekStart);
-    date.setDate(weekStart.getDate() + index);
+    date.setUTCDate(weekStart.getUTCDate() + index);
     const key = formatDateKey(date);
     const log = weeklyMap.get(key);
     const consumed = log?.caloriesConsumed ?? 0;
@@ -123,7 +151,7 @@ export async function GET(request: Request) {
     monthlyLogs.map((log) => [formatDateKey(log.date), log]),
   );
   const daysInMonth = new Date(Date.UTC(selectedYear, selectedMonth + 1, 0)).getUTCDate();
-  const userJoinDate = parseDateKey(formatDateKey(user.createdAt));
+  const userJoinDate = joinedDate;
 
   const monthlyData = Array.from({ length: daysInMonth }, (_, index) => {
     const dayNumber = index + 1;
@@ -159,7 +187,7 @@ export async function GET(request: Request) {
       heightCm: toNumber(user.profile?.heightCm),
       weightKg: toNumber(user.profile?.currentWeightKg),
       bmiLabel: getBmiLabel(toNumber(user.profile?.bmi)),
-      createdAt: formatDateKey(user.createdAt),
+      createdAt: joinedDateKey,
     },
     daily,
     weekly: {

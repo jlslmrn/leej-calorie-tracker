@@ -26,13 +26,32 @@ import {
   type WeeklyDayData,
 } from "./_components/tracker-data";
 
-const getTodayMonthYear = () => {
+const getLocalDateKey = () => {
   const now = new Date();
-  return { month: now.getUTCMonth(), year: now.getUTCFullYear() };
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const getMonthYearFromDateKey = (dateKey: string) => {
+  const [year, month] = dateKey.split("-").map(Number);
+  return {
+    year,
+    month: month - 1,
+  };
 };
 
 export default function TrackerClient() {
-  const { month: defaultMonth, year: defaultYear } = useMemo(getTodayMonthYear, []);
+  const timezone = useMemo(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    [],
+  );
+  const [anchorDate, setAnchorDate] = useState(getLocalDateKey);
+  const { month: defaultMonth, year: defaultYear } = useMemo(
+    () => getMonthYearFromDateKey(anchorDate),
+    [anchorDate],
+  );
 
   const [view, setView] = useState<TrackerView>("daily");
   const [showAddFood, setShowAddFood] = useState(false);
@@ -51,12 +70,18 @@ export default function TrackerClient() {
   const [removingEntryId, setRemovingEntryId] = useState<string | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
 
-  const loadOverview = useCallback(async (month: number, year: number) => {
+  const loadOverview = useCallback(async (month: number, year: number, dateAnchor: string) => {
     setIsLoading(true);
     setErrorMessage(null);
 
     try {
-      const response = await fetch(`/api/tracker/overview?month=${month}&year=${year}`, {
+      const params = new URLSearchParams({
+        month: String(month),
+        year: String(year),
+        tz: timezone,
+        anchorDate: dateAnchor,
+      });
+      const response = await fetch(`/api/tracker/overview?${params.toString()}`, {
         cache: "no-store",
       });
       if (!response.ok) {
@@ -73,11 +98,37 @@ export default function TrackerClient() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [timezone]);
 
   useEffect(() => {
-    void loadOverview(selectedMonth, selectedYear);
-  }, [loadOverview, selectedMonth, selectedYear]);
+    void loadOverview(selectedMonth, selectedYear, anchorDate);
+  }, [anchorDate, loadOverview, selectedMonth, selectedYear]);
+
+  useEffect(() => {
+    const updateAnchorDate = () => {
+      const nextKey = getLocalDateKey();
+      setAnchorDate((current) => {
+        if (current === nextKey) return current;
+        if (view === "daily" && !selectedDayDetails) {
+          const next = getMonthYearFromDateKey(nextKey);
+          setSelectedMonth(next.month);
+          setSelectedYear(next.year);
+        }
+        return nextKey;
+      });
+    };
+
+    updateAnchorDate();
+    const intervalId = window.setInterval(updateAnchorDate, 60_000);
+    window.addEventListener("focus", updateAnchorDate);
+    document.addEventListener("visibilitychange", updateAnchorDate);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", updateAnchorDate);
+      document.removeEventListener("visibilitychange", updateAnchorDate);
+    };
+  }, [selectedDayDetails, view]);
 
   const openDayDetails = useCallback(
     async (date: string, source: SummaryView) => {
@@ -165,6 +216,7 @@ export default function TrackerClient() {
           name: trimmedName,
           calories: Math.round(parsedCalories),
           date: overview?.daily.date,
+          tz: timezone,
         }),
       });
 
@@ -176,7 +228,7 @@ export default function TrackerClient() {
       setShowAddFood(false);
       setFoodName("");
       setCalories("");
-      await loadOverview(selectedMonth, selectedYear);
+      await loadOverview(selectedMonth, selectedYear, anchorDate);
     } catch (error) {
       setSheetError(error instanceof Error ? error.message : "Failed to add entry");
     } finally {
@@ -202,7 +254,7 @@ export default function TrackerClient() {
       if (selectedDayDetails) {
         await refreshDayDetails(selectedDayDetails.date);
       }
-      await loadOverview(selectedMonth, selectedYear);
+      await loadOverview(selectedMonth, selectedYear, anchorDate);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to remove entry");
     } finally {
@@ -238,7 +290,7 @@ export default function TrackerClient() {
       <div className="mx-auto mt-10 w-full max-w-2xl px-4">
         <ErrorState
           message={errorMessage ?? "Failed to initialize tracker."}
-          onRetry={() => void loadOverview(selectedMonth, selectedYear)}
+          onRetry={() => void loadOverview(selectedMonth, selectedYear, anchorDate)}
         />
       </div>
     );
@@ -252,7 +304,7 @@ export default function TrackerClient() {
         {errorMessage ? (
           <ErrorState
             message={errorMessage}
-            onRetry={() => void loadOverview(selectedMonth, selectedYear)}
+            onRetry={() => void loadOverview(selectedMonth, selectedYear, anchorDate)}
           />
         ) : null}
 

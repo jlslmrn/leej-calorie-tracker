@@ -15,10 +15,20 @@ type UserWithProfile = User & {
 };
 
 export const formatDateKey = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+};
+
+export const getDateKeyInTimeZone = (date: Date, timeZone: string) => {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return formatter.format(date);
 };
 
 export const parseDateKey = (dateKey: string) => {
@@ -28,15 +38,16 @@ export const parseDateKey = (dateKey: string) => {
 
 export const getWeekStartMonday = (date: Date) => {
   const copy = new Date(date);
-  const day = copy.getDay();
+  const day = copy.getUTCDay();
   const diff = day === 0 ? -6 : 1 - day;
-  copy.setDate(copy.getDate() + diff);
-  copy.setHours(0, 0, 0, 0);
+  copy.setUTCDate(copy.getUTCDate() + diff);
+  copy.setUTCHours(0, 0, 0, 0);
   return copy;
 };
 
-export const getWeekdayShort = (date: Date) =>
-  date.toLocaleDateString("en-US", { weekday: "short" });
+const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+export const getWeekdayShort = (date: Date) => WEEKDAY_SHORT[date.getUTCDay()];
 
 export const getBmiLabel = (bmi: number) => {
   if (bmi <= 0) return "No Data";
@@ -52,15 +63,12 @@ export const toNumber = (value: unknown | null | undefined) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-export const toTimeLabel = (date: Date) =>
-  date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-
 export const mapEntries = (entries: PrismaFoodEntry[]) =>
   entries.map((entry) => ({
     id: entry.id,
     name: entry.name,
     calories: entry.calories,
-    time: toTimeLabel(entry.loggedAt),
+    loggedAt: entry.loggedAt.toISOString(),
   }));
 
 export const getGoalFromProfile = (user: UserWithProfile) =>
@@ -88,6 +96,7 @@ export const mapDay = (
       year: "numeric",
       month: "long",
       day: "numeric",
+      timeZone: "UTC",
     }),
     goal,
     maintenanceCalories,
